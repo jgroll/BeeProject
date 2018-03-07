@@ -1,71 +1,174 @@
+#include <ADXL345.h>
 #include <Wire.h>
+#include <SPI.h> 
+#include <SD.h>
 #include "DS3231.h"
+
+ADXL345 adxl; //variable adxl is an instance of the ADXL345 library
+double lastX = 0;
+double lastY = 0;
+double lastZ = 0;
+bool isSDPresent = true;
 RTClib RTC;
+double vibrationMoy = 0;
+int soundMoy = 0;
+
+// INIT
 void setup() {
   Serial.begin(9600);
   Wire.begin();
   pinMode(12, INPUT);
   pinMode(0, INPUT);
-  
+  pinMode(2, INPUT);
+
+  //Serial.print("Initializing SD card...");    // see if the card is present and can be initialized:   
+  if (!SD.begin(4)) {
+    isSDPresent = false;
+    digitalWrite(5, HIGH);
+  }
+
+  adxl.powerOn();
+ 
+  //look of activity movement on this axes - 1 == on; 0 == off 
+  adxl.setActivityX(1);
+  adxl.setActivityY(1);
+  adxl.setActivityZ(1);
+
+  pinMode(5, OUTPUT);
 }
 
+// Loop to send JSON to raspberry server
 void loop() {
-  Serial.println("--------------------");
-  printDate();
-  readLid();
-  readLoudness();
-  delay(2000);
+  //Serial.println("--------------------");
+  String data = "";
+  data += readTempeture(); 
+  data += ";"; 
+  data += readLid(); 
+  data += ";"; 
+  data += getAccelerationDelta(); 
+  data += ";"; 
+  data += readLoudness(); 
+  data += ";"; 
+  data += readDate();
   
+  
+  logInFile(data);
+  
+  samplingWait();
+  
+  String dataJson = "{temperature:";
+  dataJson += readTempeture(); 
+  dataJson += ",hatchOpen:"; 
+  dataJson += readLid(); 
+  dataJson += ",vibration:"; 
+  dataJson += vibrationMoy;//getAccelerationDelta(); 
+  dataJson += ",soudActivity:"; 
+  dataJson += soundMoy;//readLoudness(); 
+  dataJson += ",dateTime:"; 
+  dataJson += readDate();
+  dataJson += "}";
+
+  Serial.println(dataJson);  
 }
 
-void readLid(){
+// Get acceleration
+double getAccelerationDelta(){
+  double deltaX;
+  double deltaY;
+  double deltaZ;
+  double xyz[3];
+  double ax,ay,az;
+  adxl.getAcceleration(xyz);
+  ax = xyz[0];
+  ay = xyz[1];
+  az = xyz[2];
+  deltaX = abs(lastX - ax);
+  deltaY = abs(lastY - ay);
+  deltaZ = abs(lastZ - az);
+  lastX = ax;
+  lastY = ay;
+  lastZ = az;
+  double meanDelta = (deltaX + deltaY + deltaZ) / 3;
+  return meanDelta;
+}
+
+// Average Loudness and vibration acceleration
+void samplingWait()
+{
+  soundMoy = 0;
+  vibrationMoy = 0;
+  for(int i = 0 ; i < 10 ; i++)
+  {
+    soundMoy += readLoudness();
+    vibrationMoy += getAccelerationDelta();
+    delay(100);
+  }
+  soundMoy /= 10;
+  vibrationMoy /= 10;
+}
+
+// Get Tempeture
+int readTempeture(){
+ int tempValue = 0;
+
+  analogRead(2);
+  tempValue = analogRead(2);
+  return tempValue;
+}
+
+// Get if hatch is open
+int readLid(){
   int valLid = 0;                  
   valLid = digitalRead(12);
-  Serial.println("Ouverture :");
-  if(valLid == 1){
-    Serial.println("The lid is close");
-  }else{
-    Serial.println("The lid is open");
-  }
-  Serial.println(valLid);
+//  if(valLid == 1){
+//    Serial.println("The lid is open");
+//  }else{
+//    Serial.println("The lid is close");
+//  }
+  return valLid;
 }
 
-void readLoudness(){
-  double valLoud = 0;
-  int sensorValue = 0;
-  int valueFix = 0;
-  float volts = 0;
-  int volts_db = 0;
-  int peak = 0;
-  int spl_db = 0;
+// Get loudness
+int readLoudness(){
+ int sensorValue = 0;
+
   analogRead(0);
-  
   sensorValue = analogRead(0);
-
-  valueFix = sensorValue ;
-  volts = (5.0 / 1024.0) * valueFix;
-  volts_db = 20.0 * log10(volts);
-  spl_db = volts + 18;
-  
-  valLoud = 20 * log10(sensorValue / 5.0);
-  Serial.println("Decibel :");
-  Serial.println(valueFix);
+  return sensorValue*100/1023;
 }
 
-void printDate(){
+// Get datetime
+String readDate(){
+ String myString = ""; 
   DateTime now = RTC.now();
-  Serial.print("DATE : ");
-  Serial.print(now.day(), DEC);
-  Serial.print('/');
-  Serial.print(now.month(), DEC);
-  Serial.print('/');
-  Serial.print(now.year(), DEC);
-  Serial.print(' ');
-  Serial.print(now.hour(), DEC);
-  Serial.print(':');
-  Serial.print(now.minute(), DEC);
-  Serial.print(':');
-  Serial.print(now.second(), DEC);
-  Serial.println();
+  myString = String(myString + now.day());
+  
+  myString = String(myString + "/" + now.month());
+  myString = String(myString + "/" + now.year());
+  myString = String(myString + " " + now.hour());
+  myString = String(myString + ":" + now.minute());
+  myString = String(myString + ":" + now.second());
+
+  return myString;
+}
+
+// Set Data in csv file and save in SD Card
+void logInFile(String data){
+  digitalWrite(5, HIGH); 
+  if(isSDPresent == false){
+    return;     
+  }
+  //Serial.println("Will log : " + data);      // open the file. note that only one file can be open at a time,   
+  // so you have to close this one before opening another.   
+  File dataFile = SD.open("datalog.csv", FILE_WRITE);    // if the file is available, write to it:  
+  if (dataFile) {     
+    dataFile.println(data);     
+    dataFile.close();     // print to the serial port too:     
+    //Serial.println(data);
+    digitalWrite(5, LOW);
+ }else {    // if the file isn't open, pop up an error:   
+     //Serial.println("error opening datalog.csv");
+     digitalWrite(5, HIGH);   
+  }
 }
 
