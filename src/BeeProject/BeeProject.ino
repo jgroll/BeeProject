@@ -62,7 +62,7 @@ void loop() {
   dataJson += readLid(); 
   dataJson += ",vibration:"; 
   dataJson += vibrationMoy;//getAccelerationDelta(); 
-  dataJson += ",soudActivity:"; 
+  dataJson += ",soundActivity:"; 
   dataJson += soundMoy;//readLoudness(); 
   dataJson += ",dateTime:"; 
   dataJson += readDate();
@@ -97,14 +97,14 @@ void samplingWait()
 {
   soundMoy = 0;
   vibrationMoy = 0;
-  for(int i = 0 ; i < 10 ; i++)
+  for(int i = 0 ; i < 100 ; i++)
   {
     soundMoy += readLoudness();
     vibrationMoy += getAccelerationDelta();
     delay(100);
   }
-  soundMoy /= 10;
-  vibrationMoy /= 10;
+  soundMoy /= 100;
+  vibrationMoy /= 100;
 }
 
 // Get Tempeture
