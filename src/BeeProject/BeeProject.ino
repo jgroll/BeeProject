@@ -56,17 +56,17 @@ void loop() {
   
   samplingWait();
   
-  String dataJson = "{temperature:";
+  String dataJson = "{\"temperature\":";
   dataJson += readTempeture(); 
-  dataJson += ",hatchOpen:"; 
+  dataJson += ",\"hatchOpen\":"; 
   dataJson += readLid(); 
-  dataJson += ",vibration:"; 
+  dataJson += ",\"vibration\":"; 
   dataJson += vibrationMoy;//getAccelerationDelta(); 
-  dataJson += ",soundActivity:"; 
+  dataJson += ",\"soundActivity\":"; 
   dataJson += soundMoy;//readLoudness(); 
-  dataJson += ",dateTime:"; 
+  dataJson += ",\"dateTime\":\""; 
   dataJson += readDate();
-  dataJson += "}";
+  dataJson += "\"}";
 
   Serial.println(dataJson);  
 }
